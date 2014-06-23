@@ -1,13 +1,10 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <libgen.h> // For basename
-#include <getopt.h>
-#include <ctype.h>
-#include <errno.h>
-#include <string.h>
-#include <windows.h>
-#include <unistd.h>
-#include <fcntl.h>
+#include <stdio.h>     // For printf, fopen, etc.
+#include <libgen.h>    // For basename
+#include <getopt.h>    // For getopt, optind, opterr, optopt
+#include <ctype.h>     // For isprint
+#include <errno.h>     // For errno   
+#include <stdlib.h>    // For exit
+#include <fcntl.h>     // For open, etc.
 
 #define VERSION "0.0.1"
 
