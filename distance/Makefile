@@ -3,4 +3,4 @@
 	gcc -std=gnu99 -o readpoint.exe readpoint.c
 
 clean:
-	rm -f *.exe
+	rm -f *.exe *.pt *.txt
