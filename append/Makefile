@@ -3,4 +3,4 @@ all:
 	gcc -S -std=gnu99 -o append.s append.c 
 
 clean:
-	rm -f *.exe
+	rm -f *.exe *.s
