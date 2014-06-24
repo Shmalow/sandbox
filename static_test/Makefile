@@ -6,6 +6,6 @@ all:
 	gcc -o testjulia.exe testjulia.o julia.a
 	
 clean:
-	rm -f *.exe *.dll *.o
+	rm -f *.exe *.dll *.o *.a
 	
 	
