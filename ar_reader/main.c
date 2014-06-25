@@ -34,7 +34,6 @@ void help(int status) {
 }
 
 void manage_options(int argc, char *argv[]) {
-	int index;
 	int c;
 
 	opterr = 0;
