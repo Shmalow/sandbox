@@ -22,6 +22,14 @@
 		x = NULL; \
 	}
 	
+#define READ(buffer, size) \
+	read(g_fd, buffer, size); \
+	if (s == -1) { \
+		fprintf(stderr, "There is an error. errno=%d (%s)\n", errno, strerror(errno)); \
+		result = 1; \
+		goto cleanup; \
+	}
+	
 char g_buffer[BUFFER_SIZE];
 off_t next_header_offset = 8;
 off_t last_header_offset = 0;
@@ -37,8 +45,7 @@ int inverse_endian(int x) {
 	return result;
 }
 
-char *trim(char *str)
-{
+char *trim(char *str) {
   char *end = NULL;
 
 	// Trim leading space
@@ -77,12 +84,8 @@ int ar_parse_header(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 		result = 1;
 		goto cleanup;
 	}
-	ssize_t s = read(g_fd, pmember_header, sizeof(IMAGE_ARCHIVE_MEMBER_HEADER));
-	if (s == -1)	{
-		fprintf(stderr, "There is an error. errno=%d (%s)\n", errno, strerror(errno));
-		result = 1;
-		goto cleanup;
-	}
+	ssize_t s = READ(pmember_header, sizeof(IMAGE_ARCHIVE_MEMBER_HEADER));
+	
 	if (s < sizeof(IMAGE_ARCHIVE_MEMBER_HEADER)) {
 		result = EOF;
 		printf("End of file.\n");
@@ -108,7 +111,6 @@ int ar_parse_header(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 		next_header_offset++;
 	}
 	
-	
 cleanup:
 	return result;
 }
@@ -118,25 +120,16 @@ int ar_parse_first_linker_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	unsigned int *offset = NULL;
 	char *symbol_name = NULL;
 	
-	
 	printf("----------First Linker Member\n");
 	unsigned int nbr_be;
-	ssize_t s = read(g_fd, &nbr_be, 4);
-	if (s == -1) {
-		fprintf(stderr, "There is an error. errno=%d (%s)\n", errno, strerror(errno));
-		result = 1;
-		goto cleanup;
-	}
+	ssize_t s = READ(&nbr_be, 4);
+	
 	unsigned int nbr = inverse_endian(nbr_be);
 	printf("Symbol Nbr: %u\n", nbr);
 	
 	offset = (unsigned int *) malloc(sizeof(unsigned int) * nbr);
-	s = read(g_fd, offset, nbr * 4);
-	if (s == -1) {
-		fprintf(stderr, "There is an error. errno=%d (%s)\n", errno, strerror(errno));
-		result = 1;
-		goto cleanup;
-	}
+	s = READ(offset, nbr * 4);
+	
 	for (int i = 0; i < nbr; i++) {
 		offset[i] = inverse_endian(offset[i]);
 		printf("offset[%d]: %d\n", i, offset[i]);
@@ -145,12 +138,7 @@ int ar_parse_first_linker_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	int size = atoi(PARSE_FIELD(pmember_header->Size));
 	size_t symbol_size = sizeof(char) * (size - 4 - (nbr * 4));
 	symbol_name = (char *) malloc(symbol_size);
-	s = read(g_fd, symbol_name, symbol_size);
-	if (s == -1) {
-		fprintf(stderr, "There is an error. errno=%d (%s)\n", errno, strerror(errno));
-		result = 1;
-		goto cleanup;
-	}
+	s = READ(symbol_name, symbol_size);
 	
 	char *cursor = symbol_name;
 	int i = 0;
@@ -162,25 +150,57 @@ int ar_parse_first_linker_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	
 cleanup:
 	FREE(offset);
+	FREE(symbol_name);
 	return result;
 }
 
 int ar_parse_second_linker_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	int result = 0;
+	unsigned int *offset = NULL;
+	unsigned short int *indice = NULL;
+	char *string = NULL;
 	
 	printf("----------Second Linker Member\n");
-	unsigned int nbr_member;
-	ssize_t s = read(g_fd, &nbr_member, 4);
-	if (s == -1) {
-		fprintf(stderr, "There is an error. errno=%d (%s)\n", errno, strerror(errno));
-		result = 1;
-		goto cleanup;
+	unsigned int member_nbr;
+	ssize_t s = READ(&member_nbr, 4);
+	printf("Member Nbr:%d\n", member_nbr);
+
+	size_t size = sizeof(unsigned int) * member_nbr;
+	offset = (unsigned int *) malloc(size);
+	s = READ(offset, size);
+	for (int i = 0; i < member_nbr; i++) {
+		printf("offset[%d]=0x%08X\n", i, offset[i]);
 	}
-	printf("Member Nbr: 0x%08X, %d\n", nbr_member, nbr_member);
-	nbr_member = inverse_endian(nbr_member);
-	printf("Member Nbr: 0x%08X, %d\n", nbr_member, nbr_member);
+	
+	unsigned int symbol_nbr;
+	s = READ(&symbol_nbr, 4);
+	printf("Symbol Nbr:%d\n", symbol_nbr);
+	
+	size = sizeof(unsigned short int) * symbol_nbr;
+	indice = (unsigned short int *) malloc(size);
+	s = READ(indice, size);
+	for (int i = 0; i < symbol_nbr; i++) {
+		printf("indice[%d]=%d\n", i, indice[i]);
+	}
+	
+	
+	int total_size = atoi(PARSE_FIELD(pmember_header->Size));
+	size = total_size - (4 + 4 * member_nbr + 4 + 2 * symbol_nbr);
+	string = (char *) malloc(size);
+	s = READ(string, size);
+	char *cursor = string;
+	int i = 0;
+	while (cursor < string + size) {
+		printf("string[%d]=%s\n", i, cursor);
+		i++;
+		cursor += strlen(cursor) + 1;
+	}
+	
 	
 cleanup:
+	FREE(offset);
+	FREE(indice);
+	FREE(string);
 	return result;
 }
 
@@ -205,12 +225,7 @@ int read_archive() {
 		goto cleanup;
 	}
 
-	ssize_t s = read(g_fd, &signature, sizeof(ar_signature));
-	if (s == -1) {
-		fprintf(stderr, "There is an error. errno=%d (%s)\n", errno, strerror(errno));
-		result = 1;
-		goto cleanup;
-	}
+	ssize_t s = READ(&signature, sizeof(ar_signature));
 	
 	printf("signature = |%s|\n", PARSE_FIELD(signature));
 	
@@ -219,7 +234,6 @@ int read_archive() {
 	} else {
 		printf("This is not an archive file.\n");
 	}
-	
 	
 	IMAGE_ARCHIVE_MEMBER_HEADER member_header;
 	int first_time = 1;
