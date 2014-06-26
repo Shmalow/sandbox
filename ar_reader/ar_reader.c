@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <ctype.h>
+#include <unistd.h>
 
 #include "ar_reader.h"
 
@@ -24,17 +25,27 @@
 	
 #define READ(buffer, size) \
 	read(g_fd, buffer, size); \
-	if (s == -1) { \
+	if (errno) { \
 		fprintf(stderr, "There is an error. errno=%d (%s)\n", errno, strerror(errno)); \
 		result = 1; \
 		goto cleanup; \
 	}
+	
+#define LSEEK(offset, mode) \
+	lseek(g_fd, offset, mode); \
+	if (errno) { \
+		fprintf(stderr, "There is an error. errno=%d (%s)\n", errno, strerror(errno)); \
+		result = 1; \
+		goto cleanup; \
+	} 
 	
 char g_buffer[BUFFER_SIZE];
 off_t next_header_offset = 8;
 off_t last_header_offset = 0;
 
 int g_fd = 0;
+
+char *g_longnames_member_buffer = NULL;
 
 int inverse_endian(int x) {
 	int result = 0;
@@ -75,15 +86,20 @@ char *parse_field(const void *field, size_t s) {
 	return g_buffer;
 }
 
+char *get_longname(int offset) {
+	return g_longnames_member_buffer + offset;
+}
+
 int ar_parse_header(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	int result = 0;
+	
 	printf("next_header_offset=0x%08X\n", (int) next_header_offset);
 	off_t o = lseek(g_fd, next_header_offset, SEEK_SET);
 	if (o == -1)	{
 		fprintf(stderr, "There is an error. errno=%d (%s)\n", errno, strerror(errno));
 		result = 1;
 		goto cleanup;
-	}
+	} 
 	ssize_t s = READ(pmember_header, sizeof(IMAGE_ARCHIVE_MEMBER_HEADER));
 	
 	if (s < sizeof(IMAGE_ARCHIVE_MEMBER_HEADER)) {
@@ -91,9 +107,15 @@ int ar_parse_header(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 		printf("End of file.\n");
 		goto cleanup;
 	}
-	printf("---Header\n");
+	printf("---------Header\n");
 
-	printf("Name: %s\n", PARSE_FIELD(pmember_header->Name));
+	char *name = PARSE_FIELD(pmember_header->Name);
+	if (name[0] == '/' && (strcmp(name, "/0") == 0 || atoi(name + 1) != 0)) {
+		printf("Name: %s (%s)\n", PARSE_FIELD(pmember_header->Name), get_longname(atoi(name + 1)));
+	} else {
+		printf("Name: %s\n", PARSE_FIELD(pmember_header->Name));
+	}
+	
 	time_t t = atoi(PARSE_FIELD(pmember_header->Date));
 	struct tm *tm = localtime(&t);
 	printf("Date: %04d/%02d/%02d - %02d:%02d:%02d (%u)\n",
@@ -120,15 +142,15 @@ int ar_parse_first_linker_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	unsigned int *offset = NULL;
 	char *symbol_name = NULL;
 	
-	printf("----------First Linker Member\n");
+	printf("----First Linker Member\n");
 	unsigned int nbr_be;
-	ssize_t s = READ(&nbr_be, 4);
+	READ(&nbr_be, 4);
 	
 	unsigned int nbr = inverse_endian(nbr_be);
 	printf("Symbol Nbr: %u\n", nbr);
 	
 	offset = (unsigned int *) malloc(sizeof(unsigned int) * nbr);
-	s = READ(offset, nbr * 4);
+	READ(offset, nbr * 4);
 	
 	for (int i = 0; i < nbr; i++) {
 		offset[i] = inverse_endian(offset[i]);
@@ -138,7 +160,7 @@ int ar_parse_first_linker_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	int size = atoi(PARSE_FIELD(pmember_header->Size));
 	size_t symbol_size = sizeof(char) * (size - 4 - (nbr * 4));
 	symbol_name = (char *) malloc(symbol_size);
-	s = READ(symbol_name, symbol_size);
+	READ(symbol_name, symbol_size);
 	
 	char *cursor = symbol_name;
 	int i = 0;
@@ -160,34 +182,33 @@ int ar_parse_second_linker_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	unsigned short int *indice = NULL;
 	char *string = NULL;
 	
-	printf("----------Second Linker Member\n");
+	printf("----Second Linker Member\n");
 	unsigned int member_nbr;
-	ssize_t s = READ(&member_nbr, 4);
+	READ(&member_nbr, 4);
 	printf("Member Nbr:%d\n", member_nbr);
 
 	size_t size = sizeof(unsigned int) * member_nbr;
 	offset = (unsigned int *) malloc(size);
-	s = READ(offset, size);
+	READ(offset, size);
 	for (int i = 0; i < member_nbr; i++) {
 		printf("offset[%d]=0x%08X\n", i, offset[i]);
 	}
 	
 	unsigned int symbol_nbr;
-	s = READ(&symbol_nbr, 4);
+	READ(&symbol_nbr, 4);
 	printf("Symbol Nbr:%d\n", symbol_nbr);
 	
 	size = sizeof(unsigned short int) * symbol_nbr;
 	indice = (unsigned short int *) malloc(size);
-	s = READ(indice, size);
+	READ(indice, size);
 	for (int i = 0; i < symbol_nbr; i++) {
 		printf("indice[%d]=%d\n", i, indice[i]);
 	}
 	
-	
 	int total_size = atoi(PARSE_FIELD(pmember_header->Size));
 	size = total_size - (4 + 4 * member_nbr + 4 + 2 * symbol_nbr);
 	string = (char *) malloc(size);
-	s = READ(string, size);
+	READ(string, size);
 	char *cursor = string;
 	int i = 0;
 	while (cursor < string + size) {
@@ -196,7 +217,6 @@ int ar_parse_second_linker_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 		cursor += strlen(cursor) + 1;
 	}
 	
-	
 cleanup:
 	FREE(offset);
 	FREE(indice);
@@ -204,10 +224,29 @@ cleanup:
 	return result;
 }
 
+int ar_parse_longnames_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
+	int result = 0;
+	
+	printf("----Longnames Member\n");
+	int size = atoi(PARSE_FIELD(pmember_header->Size));
+	g_longnames_member_buffer = (char *) malloc(size);
+	READ(g_longnames_member_buffer, size);
+	char *cursor = g_longnames_member_buffer;
+	int i = 0;
+	while (cursor < g_longnames_member_buffer + size) {
+		printf("archive[%d]=%s\n", i, cursor);
+		i++;
+		cursor += strlen(cursor) + 1;
+	}
+	
+cleanup:
+	return result;
+}
+
 int ar_parse_object_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	int result = 0;
 	
-	printf("----------Object Member\n");
+	printf("----Object Member\n");
 	
 //cleanup:
 	return result;
@@ -225,7 +264,7 @@ int read_archive() {
 		goto cleanup;
 	}
 
-	ssize_t s = READ(&signature, sizeof(ar_signature));
+	READ(&signature, sizeof(ar_signature));
 	
 	printf("signature = |%s|\n", PARSE_FIELD(signature));
 	
@@ -247,7 +286,7 @@ int read_archive() {
 				TRY(ar_parse_second_linker_member(&member_header));
 			}
 		} else if (strcmp(name, "//") == 0) {
-			// TODO: manage the case of the longname.
+			TRY(ar_parse_longnames_member(&member_header));
 		} else if ((name[0] == '/') && (atoi(name + 1) != 0)) { // Name is /n
 			// TODO: manage the case of the file with long name.
 		} else if (name[0] != '/') { // Case of name/
