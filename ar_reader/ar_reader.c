@@ -40,7 +40,7 @@
 	} 
 	
 char g_buffer[BUFFER_SIZE];
-off_t next_header_offset = 8;
+off_t g_current_header_offset = 8;
 off_t last_header_offset = 0;
 
 int g_fd = 0;
@@ -49,7 +49,7 @@ char *g_longnames_member_buffer = NULL;
 
 int inverse_endian(int x) {
 	int result = 0;
-	result = x >> 24;
+	result =  (x & 0xff000000) >> 24;
 	result += (x & 0x00ff0000) >> 8;
 	result += (x & 0x0000ff00) << 8;
 	result += (x & 0x000000ff) << 24;
@@ -60,7 +60,7 @@ char *trim(char *str) {
   char *end = NULL;
 
 	// Trim leading space
-	while (isspace(str[0])) {
+	while (str[0] == ' ') {
 		str++;
 	}
 	
@@ -70,7 +70,7 @@ char *trim(char *str) {
 	
 	// Trim trailing space
 	end = str + strlen(str) - 1;
-	while (end > str && isspace(end[0])) {
+	while (end > str && end[0] == ' ') {
 		end--;
 	}
 	// Write new null terminator
@@ -90,11 +90,32 @@ char *get_longname(int offset) {
 	return g_longnames_member_buffer + offset;
 }
 
+char *get_archive_name(int offset) {
+	int result = 0;
+	char *archive_name = NULL;
+	
+	off_t current_offset = LSEEK(0, SEEK_CUR);
+	LSEEK(offset, SEEK_SET);
+	char name[16];
+	READ(name, 16);
+	
+	archive_name = PARSE_FIELD(name);
+	
+
+	LSEEK(current_offset, SEEK_SET);
+cleanup:
+	if (result) {
+		return "error";
+	}
+	return archive_name;
+}
+
+
 int ar_parse_header(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	int result = 0;
 	
-	printf("next_header_offset=0x%08X\n", (int) next_header_offset);
-	off_t o = lseek(g_fd, next_header_offset, SEEK_SET);
+	printf("current_header_offset=0x%08X\n", (int) g_current_header_offset);
+	off_t o = lseek(g_fd, g_current_header_offset, SEEK_SET);
 	if (o == -1)	{
 		fprintf(stderr, "There is an error. errno=%d (%s)\n", errno, strerror(errno));
 		result = 1;
@@ -126,11 +147,12 @@ int ar_parse_header(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	printf("Mode: %s\n", PARSE_FIELD(pmember_header->Mode));
 	printf("Size: %s\n", PARSE_FIELD(pmember_header->Size));
 	printf("EndHeader: %02X %02X\n", pmember_header->EndHeader[0],  pmember_header->EndHeader[1]);
+	printf("current_body_offset=0x%08X\n", (int) g_current_header_offset + sizeof(IMAGE_ARCHIVE_MEMBER_HEADER));
 	
-	last_header_offset = next_header_offset;
-	next_header_offset += sizeof(IMAGE_ARCHIVE_MEMBER_HEADER) + atoi(PARSE_FIELD(pmember_header->Size));
-	if (next_header_offset % 2 == 1) {
-		next_header_offset++;
+	last_header_offset = g_current_header_offset;
+	g_current_header_offset += sizeof(IMAGE_ARCHIVE_MEMBER_HEADER) + atoi(PARSE_FIELD(pmember_header->Size));
+	if (g_current_header_offset % 2 == 1) {
+		g_current_header_offset++;
 	}
 	
 cleanup:
@@ -154,7 +176,7 @@ int ar_parse_first_linker_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	
 	for (int i = 0; i < nbr; i++) {
 		offset[i] = inverse_endian(offset[i]);
-		printf("offset[%d]: %d\n", i, offset[i]);
+		printf("offset[%d]: 0x%08X (%s)\n", i, offset[i], get_archive_name(offset[i]));
 	}
 	
 	int size = atoi(PARSE_FIELD(pmember_header->Size));
@@ -243,12 +265,37 @@ cleanup:
 	return result;
 }
 
+int ar_parse_coff_header() {
+	int result = 0;
+	
+	IMAGE_FILE_HEADER header;
+	printf("---COFF Header\n");
+	READ(&header, sizeof(IMAGE_FILE_HEADER));
+	
+	switch (header.Machine) {
+		case 0x0:
+			snprintf(g_buffer, BUFFER_SIZE, "%s", "Unknown machine (import library)");
+			break;
+		case 0x14c:
+			snprintf(g_buffer, BUFFER_SIZE, "%s", "i386 (static library)");
+			break;
+		default:
+			snprintf(g_buffer, BUFFER_SIZE, "%04X", header.Machine);
+	}
+	printf("Machine type: %s\n", g_buffer);
+	
+cleanup:
+	return result;
+}
+
 int ar_parse_object_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	int result = 0;
 	
 	printf("----Object Member\n");
 	
-//cleanup:
+	TRY(ar_parse_coff_header());
+	
+cleanup:
 	return result;
 }
 
@@ -288,7 +335,7 @@ int read_archive() {
 		} else if (strcmp(name, "//") == 0) {
 			TRY(ar_parse_longnames_member(&member_header));
 		} else if ((name[0] == '/') && (atoi(name + 1) != 0)) { // Name is /n
-			// TODO: manage the case of the file with long name.
+			TRY(ar_parse_object_member(&member_header));
 		} else if (name[0] != '/') { // Case of name/
 			TRY(ar_parse_object_member(&member_header));
 		}
