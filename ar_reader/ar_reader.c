@@ -43,6 +43,10 @@ char g_buffer[BUFFER_SIZE];
 off_t g_current_header_offset = 8;
 off_t last_header_offset = 0;
 
+IMAGE_FILE_HEADER g_header;
+
+char **g_section_table = NULL;
+
 int g_fd = 0;
 
 char *g_longnames_member_buffer = NULL;
@@ -268,24 +272,64 @@ cleanup:
 int ar_parse_coff_header() {
 	int result = 0;
 	
-	IMAGE_FILE_HEADER header;
-	printf("---COFF Header\n");
-	READ(&header, sizeof(IMAGE_FILE_HEADER));
 	
-	switch (header.Machine) {
+	printf("---COFF Header\n");
+	READ(&g_header, sizeof(IMAGE_FILE_HEADER));
+	
+	switch (g_header.Machine) {
 		case 0x0:
-			snprintf(g_buffer, BUFFER_SIZE, "%s", "Unknown machine (import library)");
+			snprintf(g_buffer, BUFFER_SIZE, "%s", "Unknown machine");
 			break;
 		case 0x14c:
-			snprintf(g_buffer, BUFFER_SIZE, "%s", "i386 (static library)");
+			snprintf(g_buffer, BUFFER_SIZE, "%s", "i386");
 			break;
 		default:
-			snprintf(g_buffer, BUFFER_SIZE, "%04X", header.Machine);
+			snprintf(g_buffer, BUFFER_SIZE, "%04X", g_header.Machine);
 	}
 	printf("Machine type: %s\n", g_buffer);
-	
+	printf("Number of sections: %d\n", g_header.NumberOfSections);
+	time_t t = g_header.TimeDateStamp;
+	struct tm *tm = localtime(&t);
+	printf("Creation date: %04d/%02d/%02d - %02d:%02d:%02d (%u)\n",
+		(1900 + tm->tm_year), (1 + tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (unsigned int) t);
+	printf("Symbol table address: 0x%08x\n", g_header.PointerToSymbolTable);
+	printf("Number of symbols: %d\n", g_header.NumberOfSymbols);
+	printf("Size of optional header: %d\n", g_header.SizeOfOptionalHeader);
+	printf("Characteristics: 0x%04X\n", g_header.Characteristics);
 cleanup:
 	return result;
+}
+
+int ar_parse_coff_section_header(int i) {
+	int result = 0;
+	
+	IMAGE_SECTION_HEADER section_header;
+	READ(&section_header, sizeof(IMAGE_SECTION_HEADER));
+	printf("**Section name: %.*s\n", 8, section_header.Name);
+	printf("  VirtualSize: %d bytes (0x%x)\n", section_header.Misc.PhysicalAddress, section_header.Misc.PhysicalAddress);
+	printf("  VirtualAddress: 0x%08x\n", section_header.VirtualAddress);
+	printf("  SizeOfRawData: %d bytes (0x%x)\n", section_header.SizeOfRawData, section_header.SizeOfRawData);
+	printf("  PointerToRawData: 0x%08x\n", section_header.PointerToRawData);
+	printf("  PointerToRelocations: 0x%08x\n", section_header.PointerToRelocations);
+	printf("  PointerToLinenumbers: 0x%08x\n", section_header.PointerToLinenumbers);
+	printf("  NumberOfRelocations: %d\n", section_header.NumberOfRelocations);
+	printf("  NumberOfLinenumbers: %d\n", section_header.NumberOfLinenumbers);
+
+cleanup:
+	return result;
+}
+
+int ar_parse_coff_section_table() {
+	int result = 0;
+	
+	printf("---Section Table\n");
+	//g_section_table = (char**) malloc(g_header.NumberOfSections * sizeof(char*));
+	for (int i = 0; i < g_header.NumberOfSections; i++) {
+		TRY(ar_parse_coff_section_header(i));
+	}
+cleanup:
+	return result;
+	
 }
 
 int ar_parse_object_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
@@ -294,6 +338,7 @@ int ar_parse_object_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	printf("----Object Member\n");
 	
 	TRY(ar_parse_coff_header());
+	TRY(ar_parse_coff_section_table());
 	
 cleanup:
 	return result;
