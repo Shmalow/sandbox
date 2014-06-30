@@ -6,6 +6,7 @@
 #include <time.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <cfgmap.h>
 
 #include "ar_reader.h"
 
