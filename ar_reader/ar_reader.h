@@ -14,6 +14,6 @@ typedef struct {
 	char buffer[IMAGE_ARCHIVE_START_SIZE];
 } ar_signature;
 
-
+void init_map();
 
 #endif // AR_READER_H

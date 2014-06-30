@@ -44,7 +44,7 @@ char g_buffer[BUFFER_SIZE];
 off_t g_current_header_offset = 8;
 off_t last_header_offset = 0;
 
-IMAGE_FILE_HEADER g_header;
+IMAGE_FILE_HEADER g_header; // coff header
 
 char **g_section_table = NULL;
 
@@ -273,30 +273,54 @@ cleanup:
 int ar_parse_coff_header() {
 	int result = 0;
 	
-	
-	printf("---COFF Header\n");
 	READ(&g_header, sizeof(IMAGE_FILE_HEADER));
 	
-	switch (g_header.Machine) {
-		case 0x0:
-			snprintf(g_buffer, BUFFER_SIZE, "%s", "Unknown machine");
-			break;
-		case 0x14c:
-			snprintf(g_buffer, BUFFER_SIZE, "%s", "i386");
-			break;
-		default:
-			snprintf(g_buffer, BUFFER_SIZE, "%04X", g_header.Machine);
+	if (g_header.Machine == IMAGE_FILE_MACHINE_UNKNOWN && g_header.NumberOfSections == 0xFFFF) {
+		// Import header
+		PIMPORT_HEADER headerp = (PIMPORT_HEADER) &g_header;
+		printf("---Import Header\n");
+		printf("Sig1: 0x%04X\n", headerp->Sig1);
+		printf("Sig2: 0x%04X\n", headerp->Sig2);
+		printf("Version: 0x%04X\n", headerp->Version);
+		printf("Machine: %s\n", map(SECTION_MACHINE, headerp->Machine));
+		time_t t = headerp->CreatedTimeStamp;
+		struct tm *tm = localtime(&t);
+		printf("Creation date: %04d/%02d/%02d - %02d:%02d:%02d (%u)\n",
+			(1900 + tm->tm_year), (1 + tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (unsigned int) t);
+		printf("Size: %d bytes\n", headerp->Size);
+		printf("Ordinal/Hint: %d\n", headerp->Hint);
+		printf("Type: 0x%04X\n", headerp->TypeName);
+		int type = headerp->TypeName & 0xc000 >> 14;
+		printf("Type: %s\n", map(SECTION_IMPORT_HEADER, type));
+		int name = headerp->TypeName & 0x3800 >> 11;
+		printf("Type: %s\n", map(SECTION_IMPORT_NAME_HEADER, name));
+		
+	} else {
+		// Normal coff header
+		printf("---COFF Header\n");
+		switch (g_header.Machine) {
+			case 0x0:
+				snprintf(g_buffer, BUFFER_SIZE, "%s", "Unknown machine");
+				break;
+			case 0x14c:
+				snprintf(g_buffer, BUFFER_SIZE, "%s", "i386");
+				break;
+			default:
+				snprintf(g_buffer, BUFFER_SIZE, "%04X", g_header.Machine);
+		}
+		printf("Machine type: %s\n", map(SECTION_MACHINE, g_header.Machine));
+		printf("Number of sections: %d\n", g_header.NumberOfSections);
+		
+		time_t t = g_header.TimeDateStamp;
+		struct tm *tm = localtime(&t);
+		printf("Creation date: %04d/%02d/%02d - %02d:%02d:%02d (%u)\n",
+			(1900 + tm->tm_year), (1 + tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (unsigned int) t);
+		printf("Symbol table address: 0x%08x\n", g_header.PointerToSymbolTable);
+		printf("Number of symbols: %d\n", g_header.NumberOfSymbols);
+		printf("Size of optional header: %d\n", g_header.SizeOfOptionalHeader);
+		printf("Characteristics:%s\n",
+			list_flags(g_buffer, BUFFER_SIZE, SECTION_CHARACTERISTICS, g_header.Characteristics));
 	}
-	printf("Machine type: %s\n", g_buffer);
-	printf("Number of sections: %d\n", g_header.NumberOfSections);
-	time_t t = g_header.TimeDateStamp;
-	struct tm *tm = localtime(&t);
-	printf("Creation date: %04d/%02d/%02d - %02d:%02d:%02d (%u)\n",
-		(1900 + tm->tm_year), (1 + tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (unsigned int) t);
-	printf("Symbol table address: 0x%08x\n", g_header.PointerToSymbolTable);
-	printf("Number of symbols: %d\n", g_header.NumberOfSymbols);
-	printf("Size of optional header: %d\n", g_header.SizeOfOptionalHeader);
-	printf("Characteristics: 0x%04X\n", g_header.Characteristics);
 cleanup:
 	return result;
 }
@@ -333,20 +357,40 @@ cleanup:
 	
 }
 
+int ar_parse_object_import_name_str() {
+	int result = 0;
+// cleanup:
+	return result;
+}
+
+int ar_parse_object_import_dll_str() {
+	int result = 0;
+// cleanup:
+	return result;
+}
+
 int ar_parse_object_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	int result = 0;
 	
 	printf("----Object Member\n");
 	
 	TRY(ar_parse_coff_header());
-	TRY(ar_parse_coff_section_table());
-	
+		
+	if (g_header.Machine == IMAGE_FILE_MACHINE_UNKNOWN && g_header.NumberOfSections == 0xFFFF) {
+		// TODO: to be defined.
+		TRY(ar_parse_object_import_name_str());
+		TRY(ar_parse_object_import_dll_str());
+	} else {
+		TRY(ar_parse_coff_section_table());
+	}
 cleanup:
 	return result;
 }
 
 int read_archive() {
 	int result = 0;
+	
+	init_map();
 	ar_signature signature;
 	memset(&signature, 0, sizeof(ar_signature));
 
