@@ -61,6 +61,14 @@ int inverse_endian(int x) {
 	return result;
 }
 
+int inverse_endian2(int x) {
+	int result = 0;
+	result =  (x & 0xff00) >> 8;
+	result += (x & 0x00ff) << 8;
+	return result;
+}
+
+
 char *trim(char *str) {
   char *end = NULL;
 
@@ -120,12 +128,7 @@ int ar_parse_header(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	int result = 0;
 	
 	printf("current_header_offset=0x%08X\n", (int) g_current_header_offset);
-	off_t o = lseek(g_fd, g_current_header_offset, SEEK_SET);
-	if (o == -1)	{
-		fprintf(stderr, "There is an error. errno=%d (%s)\n", errno, strerror(errno));
-		result = 1;
-		goto cleanup;
-	} 
+	LSEEK(g_current_header_offset, SEEK_SET);
 	ssize_t s = READ(pmember_header, sizeof(IMAGE_ARCHIVE_MEMBER_HEADER));
 	
 	if (s < sizeof(IMAGE_ARCHIVE_MEMBER_HEADER)) {
@@ -289,11 +292,12 @@ int ar_parse_coff_header() {
 			(1900 + tm->tm_year), (1 + tm->tm_mon), tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec, (unsigned int) t);
 		printf("Size: %d bytes\n", headerp->Size);
 		printf("Ordinal/Hint: %d\n", headerp->Hint);
-		printf("Type: 0x%04X\n", headerp->TypeName);
-		int type = headerp->TypeName & 0xc000 >> 14;
+		
+		int type_name = inverse_endian2(headerp->TypeName);
+		int type = type_name & 0xc000 >> 14;
 		printf("Type: %s\n", map(SECTION_IMPORT_HEADER, type));
-		int name = headerp->TypeName & 0x3800 >> 11;
-		printf("Type: %s\n", map(SECTION_IMPORT_NAME_HEADER, name));
+		int name = (type_name & 0x3800) >> 11;
+		printf("name: %s\n", map(SECTION_IMPORT_NAME_HEADER, name));
 		
 	} else {
 		// Normal coff header
@@ -359,7 +363,25 @@ cleanup:
 
 int ar_parse_object_import_name_str() {
 	int result = 0;
-// cleanup:
+	char *string = NULL;
+	 
+	off_t o = LSEEK(0, SEEK_CUR);
+	printf("o=0x%08X\n", (unsigned int) o);
+	PIMPORT_HEADER headerp = (PIMPORT_HEADER) &g_header;
+	int size = sizeof(char) * headerp->Size;
+	printf("size=%d\n", size);
+	string = (char *) malloc(size);
+	READ(string, sizeof(IMAGE_SECTION_HEADER));
+	char *cursor = string;
+	int i = 0;
+	while (cursor < string + size) {
+		printf("symbol[%d]=%s\n", i, cursor);
+		i++;
+		cursor += strlen(cursor) + 1;
+	}
+	
+cleanup:
+	FREE(string);
 	return result;
 }
 
