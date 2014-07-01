@@ -40,9 +40,12 @@
 		goto cleanup; \
 	} 
 	
+#define STARTS_WITH(s1, s2) (strncmp(s1, s2, strlen(s2)) == 0)
+	
 char g_buffer[BUFFER_SIZE];
 off_t g_current_header_offset = 8;
 off_t last_header_offset = 0;
+coff_t g_coff;
 
 IMAGE_FILE_HEADER g_header; // coff header
 
@@ -334,7 +337,11 @@ int ar_parse_coff_section_header(int i) {
 	
 	IMAGE_SECTION_HEADER section_header;
 	READ(&section_header, sizeof(IMAGE_SECTION_HEADER));
-	printf("**Section name: %.*s\n", 8, section_header.Name);
+	
+	char name[IMAGE_SIZEOF_SHORT_NAME + 1];
+	memset(name, 0, IMAGE_SIZEOF_SHORT_NAME + 1);
+	memcpy(name, section_header.Name, IMAGE_SIZEOF_SHORT_NAME);
+	printf("**Section name: %s\n", name);
 	printf("  VirtualSize: %d bytes (0x%x)\n", section_header.Misc.PhysicalAddress, section_header.Misc.PhysicalAddress);
 	printf("  VirtualAddress: 0x%08x\n", section_header.VirtualAddress);
 	printf("  SizeOfRawData: %d bytes (0x%x)\n", section_header.SizeOfRawData, section_header.SizeOfRawData);
@@ -343,7 +350,35 @@ int ar_parse_coff_section_header(int i) {
 	printf("  PointerToLinenumbers: 0x%08x\n", section_header.PointerToLinenumbers);
 	printf("  NumberOfRelocations: %d\n", section_header.NumberOfRelocations);
 	printf("  NumberOfLinenumbers: %d\n", section_header.NumberOfLinenumbers);
-
+	
+	// Print the content of the section if the section starts with .idata$...
+	if (STARTS_WITH(name, ".idata")) {
+		printf("This is an import section.\n");
+		if (section_header.SizeOfRawData == 0) {
+			printf("Empty content.\n");
+		} else if (section_header.SizeOfRawData == 4) {
+			unsigned int content;
+			off_t current_offset = LSEEK(0, SEEK_CUR);
+			LSEEK(g_coff.offset + section_header.PointerToRawData, SEEK_SET);
+			READ(&content, section_header.SizeOfRawData);
+			LSEEK(current_offset, SEEK_SET);
+			printf("Content as int: 0x%08X.\n", content);
+		} else if (section_header.SizeOfRawData != 4) {
+			off_t current_offset = LSEEK(0, SEEK_CUR);
+			LSEEK(g_coff.offset + section_header.PointerToRawData, SEEK_SET);
+			memset(g_buffer, 0, BUFFER_SIZE);
+			READ(g_buffer, section_header.SizeOfRawData);
+			LSEEK(current_offset, SEEK_SET);
+			printf("Content as string: %s.\n", g_buffer);
+			printf("Content as string+2: %s.\n", g_buffer + 2);
+			printf("Content as hexa: \n");
+			for (int i = 0; i < section_header.SizeOfRawData; i++) {
+				printf("%02X ", g_buffer[i]);
+			}
+			printf("\n");
+		}
+	}
+	
 cleanup:
 	return result;
 }
@@ -371,10 +406,11 @@ int ar_parse_object_import_name_str() {
 	int size = sizeof(char) * headerp->Size;
 	printf("size=%d\n", size);
 	string = (char *) malloc(size);
-	READ(string, sizeof(IMAGE_SECTION_HEADER));
+	READ(string, size);
 	char *cursor = string;
 	int i = 0;
 	while (cursor < string + size) {
+		//printf("cursor=%08X\n", (unsigned int) cursor);
 		printf("symbol[%d]=%s\n", i, cursor);
 		i++;
 		cursor += strlen(cursor) + 1;
@@ -385,23 +421,16 @@ cleanup:
 	return result;
 }
 
-int ar_parse_object_import_dll_str() {
-	int result = 0;
-// cleanup:
-	return result;
-}
-
 int ar_parse_object_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	int result = 0;
+	g_coff.offset = LSEEK(0, SEEK_CUR);
 	
 	printf("----Object Member\n");
 	
 	TRY(ar_parse_coff_header());
 		
 	if (g_header.Machine == IMAGE_FILE_MACHINE_UNKNOWN && g_header.NumberOfSections == 0xFFFF) {
-		// TODO: to be defined.
 		TRY(ar_parse_object_import_name_str());
-		TRY(ar_parse_object_import_dll_str());
 	} else {
 		TRY(ar_parse_coff_section_table());
 	}
