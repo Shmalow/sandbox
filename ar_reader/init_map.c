@@ -82,5 +82,47 @@ void init_map() {
 	set_record(SECTION_STORAGE_CLASS, IMAGE_SYM_CLASS_WEAK_EXTERNAL		, "IMAGE_SYM_CLASS_WEAK_EXTERNAL");
 	set_record(SECTION_STORAGE_CLASS, IMAGE_SYM_CLASS_CLR_TOKEN			, "IMAGE_SYM_CLASS_CLR_TOKEN");
 
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_TYPE_REG				, "Reserved for future use");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_TYPE_DSECT				, "Reserved for future use");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_TYPE_NOLOAD			, "Reserved for future use");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_TYPE_GROUP				, "Reserved for future use");
+	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_TYPE_NO_PAD			, "Not padded (obsolete)");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_TYPE_COPY				, "Reserved for future use");
+	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_CNT_CODE				, "Contains executable code");
+	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_CNT_INITIALIZED_DATA	, "Contains initialized data");
+	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_CNT_UNINITIALIZED_DATA, "Contains uninitialized data");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_LNK_OTHER				, "Reserved for future use");
+	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_LNK_INFO				, "Directive section (linker info)");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_TYPE_OVER				, "Reserved for future use");
+	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_LNK_REMOVE			, "Will not be part of the image");
+	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_LNK_COMDAT			, "Contains COMDAT data");
+	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_GPREL					, "Contains data referenced throught Global Pointer");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_MEM_FARDATA			, "Reserved for future use");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_MEM_PURGEABLE			, "Reserved for future use");
+	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_MEM_16BIT				, "ARM: Contains Thumb code /Others: Reserved for future use");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_MEM_LOCKED				, "Reserved for future use");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_MEM_PRELOAD			, "Reserved for future use");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_ALIGN_1BYTES			, "Align data 1-byte boundary (object)");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_ALIGN_2BYTES			, "Align data 2-byte boundary (object)");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_ALIGN_4BYTES			, "Align data 4-byte boundary (object)");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_ALIGN_8BYTES			, "Align data 8-byte boundary (object)");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_ALIGN_16BYTES			, "Align data 16-byte boundary (object)");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_ALIGN_32BYTES			, "Align data 32-byte boundary (object)");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_ALIGN_64BYTES			, "Align data 64-byte boundary (object)");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_ALIGN_128BYTES		, "Align data 128-byte boundary (object)");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_ALIGN_256BYTES		, "Align data 256-byte boundary (object)");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_ALIGN_512BYTES		, "Align data 512-byte boundary (object)");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_ALIGN_1024BYTES		, "Align data 1024-byte boundary (object)");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_ALIGN_2048BYTES		, "Align data 2048-byte boundary (object)");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_ALIGN_4096BYTES		, "Align data 4096-byte boundary (object)");
+//	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_ALIGN_8192BYTES		, "Align data 8192-byte boundary (object)");
+	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_LNK_NRELOC_OVFL		, "Contains extented relocation");
+	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_MEM_DISCARDABLE		, "Can be discarded");
+	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_MEM_NOT_CACHED		, "Cannot be cached");
+	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_MEM_NOT_PAGED			, "Not pageable");
+	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_MEM_SHARED			, "Can be shared in memory");
+	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_MEM_EXECUTE			, "Can be executed as code");
+	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_MEM_READ				, "Readable");
+	set_record(SECTION_SECTION_CHARACTERISTICS, IMAGE_SCN_MEM_WRITE				, "Writable");
 
 }

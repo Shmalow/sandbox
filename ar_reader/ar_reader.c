@@ -361,6 +361,8 @@ int ar_parse_coff_section_header(int i) {
 	printf("  PointerToLinenumbers: 0x%08x\n", section_header.PointerToLinenumbers);
 	printf("  NumberOfRelocations: %d\n", section_header.NumberOfRelocations);
 	printf("  NumberOfLinenumbers: %d\n", section_header.NumberOfLinenumbers);
+	printf("  Characteristics: %s\n",
+			list_flags(g_buffer, BUFFER_SIZE, SECTION_SECTION_CHARACTERISTICS, section_header.Characteristics));
 	
 	// Print the content of the section if the section starts with .idata$...
 	if (STARTS_WITH(name, ".idata")) {
