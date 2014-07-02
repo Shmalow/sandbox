@@ -450,7 +450,7 @@ int ar_parse_coff_symbol_table() {
 			if (symbol_entries[i].StorageClass == IMAGE_SYM_CLASS_EXTERNAL) {
 				// int o = g_coff.offset + g_coff.section_table[symbol_entries[i].SectionNumber - 1].PointerToRawData + symbol_entries[i].Value;
 				// read_offset(g_buffer, BUFFER_SIZE, o);
-				// printf("    Interpretation: The value of the symbol is: %s\n", g_buffer);
+				printf("    Interpretation: The field 'Value' gives the offset of the symbol value in the section.\n");
 				printf("    Interpretation: This is an external symbol.\n");
 			} else if (symbol_entries[i].StorageClass == IMAGE_SYM_CLASS_STATIC) {
 				if (symbol_entries[i].Value == 0) {
