@@ -4,9 +4,10 @@
 #define IMAGE_ARCHIVE_START "!<arch>\n"
 
 //#define BYTE unsigned char
-typedef unsigned char BYTE;
-typedef unsigned short int WORD;
-typedef unsigned int DWORD;
+typedef unsigned char BYTE, *PBYTE;
+typedef unsigned short int WORD, *PWORD;
+typedef short SHORT, *PSHORT;
+typedef unsigned int DWORD, *PDWORD;
 
 typedef struct _IMAGE_ARCHIVE_MEMBER_HEADER {
 	BYTE Name[16];
@@ -59,12 +60,33 @@ typedef struct _IMPORT_HEADER {
 	WORD TypeName;
 } IMPORT_HEADER,*PIMPORT_HEADER;
 
+#pragma pack(push, 2)
+typedef struct _IMAGE_SYMBOL {
+	union {
+		BYTE ShortName[8];
+		struct {
+			DWORD Short;
+			DWORD Long;
+		} Name;
+		PBYTE LongName[2];
+	} N;
+	DWORD Value;
+	SHORT SectionNumber;
+	WORD Type;
+	BYTE StorageClass;
+	BYTE NumberOfAuxSymbols;
+} IMAGE_SYMBOL, *PIMAGE_SYMBOL;
+#pragma pack(pop)
+
 // maps
 #define SECTION_MACHINE					0
 #define SECTION_CHARACTERISTICS			1
 
 #define SECTION_IMPORT_HEADER			100
 #define SECTION_IMPORT_NAME_HEADER		101
+
+#define SECTION_SECTION_NUMBER_VALUE	200
+#define SECTION_STORAGE_CLASS			201
 
 // Possible values for IMAGE_FILE_HEADER.Machine
 #define IMAGE_FILE_MACHINE_UNKNOWN		0x0000
@@ -114,5 +136,41 @@ typedef struct _IMPORT_HEADER {
 #define IMPORT_NAME				1
 #define IMPORT_NAME_NOPREFIX	2
 #define IMPORT_NAME_UNDECORATE	3
+
+
+// Symbol table (SectionNumber)
+#define IMAGE_SYM_UNDEFINED	0
+#define IMAGE_SYM_ABSOLUTE (-1)
+#define IMAGE_SYM_DEBUG	(-2)
+
+// Symbol table (StorageClass)
+#define IMAGE_SYM_CLASS_END_OF_FUNCTION		(-1)
+#define IMAGE_SYM_CLASS_NULL				0
+#define IMAGE_SYM_CLASS_AUTOMATIC			1
+#define IMAGE_SYM_CLASS_EXTERNAL			2
+#define IMAGE_SYM_CLASS_STATIC				3
+#define IMAGE_SYM_CLASS_REGISTER			4
+#define IMAGE_SYM_CLASS_EXTERNAL_DEF		5
+#define IMAGE_SYM_CLASS_LABEL				6
+#define IMAGE_SYM_CLASS_UNDEFINED_LABEL		7
+#define IMAGE_SYM_CLASS_MEMBER_OF_STRUCT	8
+#define IMAGE_SYM_CLASS_ARGUMENT			9
+#define IMAGE_SYM_CLASS_STRUCT_TAG			10
+#define IMAGE_SYM_CLASS_MEMBER_OF_UNION		11
+#define IMAGE_SYM_CLASS_UNION_TAG			12
+#define IMAGE_SYM_CLASS_TYPE_DEFINITION		13
+#define IMAGE_SYM_CLASS_UNDEFINED_STATIC	14
+#define IMAGE_SYM_CLASS_ENUM_TAG			15
+#define IMAGE_SYM_CLASS_MEMBER_OF_ENUM		16
+#define IMAGE_SYM_CLASS_REGISTER_PARAM		17
+#define IMAGE_SYM_CLASS_BIT_FIELD			18
+#define IMAGE_SYM_CLASS_FAR_EXTERNAL		68 /* Not in PECOFF v8 spec */
+#define IMAGE_SYM_CLASS_BLOCK				100
+#define IMAGE_SYM_CLASS_FUNCTION			101
+#define IMAGE_SYM_CLASS_END_OF_STRUCT		102
+#define IMAGE_SYM_CLASS_FILE				103
+#define IMAGE_SYM_CLASS_SECTION				104
+#define IMAGE_SYM_CLASS_WEAK_EXTERNAL		105
+#define IMAGE_SYM_CLASS_CLR_TOKEN			107
 
 #endif // MY_WINNT_H

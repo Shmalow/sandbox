@@ -18,6 +18,7 @@ typedef struct {
 
 typedef struct {
 	off_t offset;
+	PIMAGE_SECTION_HEADER section_table;
 } coff_t;
 
 void init_map();

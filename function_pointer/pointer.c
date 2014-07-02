@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-typedef int (*pf1_t) (int, int);
+typedef int (*pf1_t)(int, int);
 
 int pointer(int a, int b) {
 	printf("a=%d and b=%d\n", a, b);

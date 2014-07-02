@@ -55,6 +55,18 @@ int g_fd = 0;
 
 char *g_longnames_member_buffer = NULL;
 
+int read_offset(char *buf, size_t size, int offset) {
+	int result = 0;
+	off_t current_offset = LSEEK(0, SEEK_CUR);
+	LSEEK(offset, SEEK_SET);
+
+	READ(buf, size);
+	LSEEK(current_offset, SEEK_SET);
+	
+cleanup:
+	return result;
+}
+
 int inverse_endian(int x) {
 	int result = 0;
 	result =  (x & 0xff000000) >> 24;
@@ -335,8 +347,7 @@ cleanup:
 int ar_parse_coff_section_header(int i) {
 	int result = 0;
 	
-	IMAGE_SECTION_HEADER section_header;
-	READ(&section_header, sizeof(IMAGE_SECTION_HEADER));
+	IMAGE_SECTION_HEADER section_header = g_coff.section_table[i];
 	
 	char name[IMAGE_SIZEOF_SHORT_NAME + 1];
 	memset(name, 0, IMAGE_SIZEOF_SHORT_NAME + 1);
@@ -387,13 +398,92 @@ int ar_parse_coff_section_table() {
 	int result = 0;
 	
 	printf("---Section Table\n");
-	//g_section_table = (char**) malloc(g_header.NumberOfSections * sizeof(char*));
+	int size = g_header.NumberOfSections * sizeof(IMAGE_SECTION_HEADER);
+	g_coff.section_table = (PIMAGE_SECTION_HEADER) malloc(size);
+	READ(g_coff.section_table, size);
 	for (int i = 0; i < g_header.NumberOfSections; i++) {
 		TRY(ar_parse_coff_section_header(i));
 	}
 cleanup:
 	return result;
 	
+}
+
+int ar_parse_coff_symbol_table() {
+	int result = 0;
+	off_t current_offset = -1;
+	
+	printf("--Symbol Table\n");
+	
+	current_offset = LSEEK(0, SEEK_CUR);
+	LSEEK(g_coff.offset + g_header.PointerToSymbolTable, SEEK_SET);
+	
+	int size = g_header.NumberOfSymbols * sizeof(IMAGE_SYMBOL);
+	PIMAGE_SYMBOL symbol_entries = (PIMAGE_SYMBOL) malloc(size);
+	READ(symbol_entries, size);
+
+	int string_table_offset = g_coff.offset + g_header.PointerToSymbolTable + size;
+
+	for (int i = 0; i < g_header.NumberOfSymbols; i++) {
+		char buf[BUFFER_SIZE];
+		memset(buf, 0, BUFFER_SIZE);
+		if (symbol_entries[i].N.Name.Short == 0) {
+			read_offset(buf, BUFFER_SIZE, string_table_offset + symbol_entries[i].N.Name.Long);
+			printf("%d) Name: %s (long)\n", i, buf);	
+		} else {
+			char buf[9];
+			memcpy(buf, symbol_entries[i].N.ShortName, 8);
+			buf[8] = 0;
+			printf("%d) Name: %s (short)\n", i, buf);
+		}
+
+		printf("  Value: 0x%08x\n", symbol_entries[i].Value);
+		if (symbol_entries[i].SectionNumber == IMAGE_SYM_UNDEFINED) {
+			if (symbol_entries[i].Value == 0) {
+				printf("    Interpretation: It is an external symbol.\n");
+			} else {
+				printf("    Interpretation: The size of the symbol is %d.\n", symbol_entries[i].Value);
+			}
+		} else if (symbol_entries[i].SectionNumber == IMAGE_SYM_ABSOLUTE) {
+			printf("    Interpretation: The value of the symbol is: %d\n", symbol_entries[i].Value);
+		} else if (symbol_entries[i].SectionNumber > 0) {
+			if (symbol_entries[i].StorageClass == IMAGE_SYM_CLASS_EXTERNAL) {
+				// int o = g_coff.offset + g_coff.section_table[symbol_entries[i].SectionNumber - 1].PointerToRawData + symbol_entries[i].Value;
+				// read_offset(g_buffer, BUFFER_SIZE, o);
+				// printf("    Interpretation: The value of the symbol is: %s\n", g_buffer);
+				printf("    Interpretation: This is an external symbol.\n");
+			} else if (symbol_entries[i].StorageClass == IMAGE_SYM_CLASS_STATIC) {
+				if (symbol_entries[i].Value == 0) {
+					printf("    Interpretation: It is a section name.\n");
+				}
+				
+			}
+		}
+
+		if (symbol_entries[i].SectionNumber <= 0) {
+			printf("  SectionNumber: %d (%s)\n",
+				symbol_entries[i].SectionNumber, map(SECTION_SECTION_NUMBER_VALUE, symbol_entries[i].SectionNumber));
+		} else {
+			printf("  SectionNumber: %d (%s)\n",
+				symbol_entries[i].SectionNumber, g_coff.section_table[symbol_entries[i].SectionNumber - 1].Name);
+		}
+		if (symbol_entries[i].Type != 0) {
+			printf("  Type: %d (%s)\n", symbol_entries[i].Type, ""); //map(SECTION_SYMBOL_TYPE, symbol_entries[i].Type));
+		}
+		
+		printf("  StorageClass: %s\n", map(SECTION_STORAGE_CLASS, symbol_entries[i].StorageClass));
+		if (symbol_entries[i].NumberOfAuxSymbols != 0) {
+			printf("  NumberOfAuxSymbols: %d\n", symbol_entries[i].NumberOfAuxSymbols);
+		}
+		
+		printf("\n");
+	}
+
+cleanup:
+	if (current_offset != -1) {
+		LSEEK(current_offset, SEEK_SET);
+	}
+	return result;
 }
 
 int ar_parse_object_import_name_str() {
@@ -433,6 +523,7 @@ int ar_parse_object_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 		TRY(ar_parse_object_import_name_str());
 	} else {
 		TRY(ar_parse_coff_section_table());
+		TRY(ar_parse_coff_symbol_table());
 	}
 cleanup:
 	return result;
