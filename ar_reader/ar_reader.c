@@ -46,6 +46,8 @@ char g_buffer[BUFFER_SIZE];
 off_t g_current_header_offset = 8;
 off_t last_header_offset = 0;
 coff_t g_coff;
+int g_is_microsoft_style = 0;
+int g_is_import_lib = 0;
 
 IMAGE_FILE_HEADER g_header; // coff header
 
@@ -59,7 +61,6 @@ int read_offset(char *buf, size_t size, int offset) {
 	int result = 0;
 	off_t current_offset = LSEEK(0, SEEK_CUR);
 	LSEEK(offset, SEEK_SET);
-
 	READ(buf, size);
 	LSEEK(current_offset, SEEK_SET);
 	
@@ -209,8 +210,11 @@ int ar_parse_first_linker_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	
 	char *cursor = symbol_name;
 	int i = 0;
-	while (cursor < symbol_name + symbol_size) {
+	while ((cursor < symbol_name + symbol_size) && (i < nbr)) {
 		printf("symbol[%d]=%s\n", i, cursor);
+		if (strcmp(cursor, "__NULL_IMPORT_DESCRIPTOR") == 0) {
+			g_is_microsoft_style = 1;
+		}
 		i++;
 		cursor += strlen(cursor) + 1;
 	}
@@ -366,7 +370,9 @@ int ar_parse_coff_section_header(int i) {
 	
 	// Print the content of the section if the section starts with .idata$...
 	if (STARTS_WITH(name, ".idata")) {
+		g_is_import_lib = 1;
 		printf("This is an import section.\n");
+		char n = name[7];
 		if (section_header.SizeOfRawData == 0) {
 			printf("Empty content.\n");
 		} else if (section_header.SizeOfRawData == 4) {
@@ -377,18 +383,28 @@ int ar_parse_coff_section_header(int i) {
 			LSEEK(current_offset, SEEK_SET);
 			printf("Content as int: 0x%08X.\n", content);
 		} else if (section_header.SizeOfRawData != 4) {
-			off_t current_offset = LSEEK(0, SEEK_CUR);
-			LSEEK(g_coff.offset + section_header.PointerToRawData, SEEK_SET);
 			memset(g_buffer, 0, BUFFER_SIZE);
-			READ(g_buffer, section_header.SizeOfRawData);
-			LSEEK(current_offset, SEEK_SET);
-			printf("Content as string: %s.\n", g_buffer);
-			printf("Content as string+2: %s.\n", g_buffer + 2);
-			printf("Content as hexa: \n");
-			for (int i = 0; i < section_header.SizeOfRawData; i++) {
-				printf("%02X ", g_buffer[i]);
+			read_offset(g_buffer, section_header.SizeOfRawData, g_coff.offset + section_header.PointerToRawData);
+			unsigned short int hint = (unsigned short int) (*g_buffer);
+			switch (n) {
+				case '6':
+					if (!g_is_microsoft_style) {
+						printf(".idata$6 is a exported Hint/Name record. (Hint=%d, Symbol name=%s)\n", hint, g_buffer + 2);
+					} else {
+						printf(".idata$6 gives the dll_name: %s\n", g_buffer);
+					}
+					break;
+				case '7':
+					if (!g_is_microsoft_style) {
+						printf(".idata$7 gives the dll_name: %s\n", g_buffer);
+					}
+					break;
+				default:
+					for (int i = 0; i < section_header.SizeOfRawData; i++) {
+						printf("%02X ", g_buffer[i]);
+					}
+					printf("\n");	
 			}
-			printf("\n");
 		}
 	}
 	
@@ -507,6 +523,8 @@ int ar_parse_object_import_name_str() {
 		i++;
 		cursor += strlen(cursor) + 1;
 	}
+	//note: string + 1 to remove the _
+	printf("The exported Hint/Name record. (Hint=%d, Symbol name=%s)\n", headerp->Hint, string + 1);
 	
 cleanup:
 	FREE(string);
@@ -553,6 +571,8 @@ int read_archive() {
 		printf("This seems to be an archive file.\n");
 	} else {
 		printf("This is not an archive file.\n");
+		result = 1;
+		goto cleanup;
 	}
 	
 	IMAGE_ARCHIVE_MEMBER_HEADER member_header;
@@ -573,6 +593,15 @@ int read_archive() {
 		} else if (name[0] != '/') { // Case of name/
 			TRY(ar_parse_object_member(&member_header));
 		}
+	}
+	if (g_is_import_lib) {
+		if (g_is_microsoft_style) {
+			printf("This is a Microsoft style import library.\n");
+		} else {
+			printf("This is a GNU style import library.\n");
+		}
+	} else {
+		printf("This is a static library.\n");
 	}
 	
 cleanup:
