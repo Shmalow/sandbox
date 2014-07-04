@@ -8,7 +8,7 @@ all:
 	gcc -Wall -std=gnu99 -o ar_reader.exe ar_reader.o main.o init_map.o -lcfgmap -L/usr/local/lib
 
 clean:
-	rm -f *.exe *.pt *.txt *.o *.a *.i
+	rm -f *.exe *.pt *.txt *.o *.a *.i *.lib
 	
 install: all
 	mkdir -p /usr/local/bin
