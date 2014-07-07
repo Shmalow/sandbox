@@ -48,6 +48,8 @@ off_t last_header_offset = 0;
 coff_t g_coff;
 int g_is_microsoft_style = 0;
 int g_is_import_lib = 0;
+int g_is_masm32_lib = 0;
+int g_is_masm32_lib_first_time = 1;
 
 IMAGE_FILE_HEADER g_header; // coff header
 
@@ -106,6 +108,13 @@ char *trim(char *str) {
 	end[1] = 0;
 	
 	return str;
+}
+
+void print_hexa(const char *buffer, int size) {
+	for (int i = 0; i < size; i++) {
+		printf("%02X ", (unsigned char) buffer[i]);
+	}
+	printf("\n");	
 }
 
 char *parse_field(const void *field, size_t s) {
@@ -343,6 +352,10 @@ int ar_parse_coff_header() {
 		printf("Size of optional header: %d\n", g_header.SizeOfOptionalHeader);
 		printf("Characteristics:%s\n",
 			list_flags(g_buffer, BUFFER_SIZE, SECTION_CHARACTERISTICS, g_header.Characteristics));
+			
+		if (g_header.SizeOfOptionalHeader != 0) {
+			g_is_masm32_lib = 1;
+		}
 	}
 cleanup:
 	return result;
@@ -368,6 +381,9 @@ int ar_parse_coff_section_header(int i) {
 	printf("  Characteristics: %s\n",
 			list_flags(g_buffer, BUFFER_SIZE, SECTION_SECTION_CHARACTERISTICS, section_header.Characteristics));
 	
+	memset(g_buffer, 0, BUFFER_SIZE);
+	read_offset(g_buffer, section_header.SizeOfRawData, g_coff.offset + section_header.PointerToRawData);
+	
 	// Print the content of the section if the section starts with .idata$...
 	if (STARTS_WITH(name, ".idata")) {
 		g_is_import_lib = 1;
@@ -383,15 +399,23 @@ int ar_parse_coff_section_header(int i) {
 			LSEEK(current_offset, SEEK_SET);
 			printf("Content as int: 0x%08X.\n", content);
 		} else if (section_header.SizeOfRawData != 4) {
-			memset(g_buffer, 0, BUFFER_SIZE);
-			read_offset(g_buffer, section_header.SizeOfRawData, g_coff.offset + section_header.PointerToRawData);
+			
 			unsigned short int hint = (unsigned short int) (*g_buffer);
 			switch (n) {
 				case '6':
-					if (!g_is_microsoft_style) {
-						printf(".idata$6 is a exported Hint/Name record. (Hint=%d, Symbol name=%s)\n", hint, g_buffer + 2);
-					} else {
+					if (g_is_masm32_lib) {
+						if (g_is_masm32_lib_first_time) {
+							printf(".idata$6 gives the dll_name: %s\n", g_buffer);
+							g_is_masm32_lib_first_time = 0;
+						} else {
+							printf(".idata$6 is a exported Hint/Name record. (Hint=%d, Symbol name=%s)\n", hint, g_buffer + 2);
+						}
+						
+						
+					} else if (g_is_microsoft_style) {
 						printf(".idata$6 gives the dll_name: %s\n", g_buffer);
+					} else {
+						printf(".idata$6 is a exported Hint/Name record. (Hint=%d, Symbol name=%s)\n", hint, g_buffer + 2);
 					}
 					break;
 				case '7':
@@ -400,13 +424,13 @@ int ar_parse_coff_section_header(int i) {
 					}
 					break;
 				default:
-					for (int i = 0; i < section_header.SizeOfRawData; i++) {
-						printf("%02X ", g_buffer[i]);
-					}
-					printf("\n");	
+					;	
 			}
 		}
+		
 	}
+	printf("%s content=\n", name);
+	print_hexa(g_buffer, section_header.SizeOfRawData);
 	
 cleanup:
 	return result;
@@ -418,6 +442,7 @@ int ar_parse_coff_section_table() {
 	printf("---Section Table\n");
 	int size = g_header.NumberOfSections * sizeof(IMAGE_SECTION_HEADER);
 	g_coff.section_table = (PIMAGE_SECTION_HEADER) malloc(size);
+	LSEEK(g_header.SizeOfOptionalHeader, SEEK_CUR);
 	READ(g_coff.section_table, size);
 	for (int i = 0; i < g_header.NumberOfSections; i++) {
 		TRY(ar_parse_coff_section_header(i));
@@ -486,7 +511,7 @@ int ar_parse_coff_symbol_table() {
 				symbol_entries[i].SectionNumber, g_coff.section_table[symbol_entries[i].SectionNumber - 1].Name);
 		}
 		if (symbol_entries[i].Type != 0) {
-			printf("  Type: %d (%s)\n", symbol_entries[i].Type, ""); //map(SECTION_SYMBOL_TYPE, symbol_entries[i].Type));
+			printf("  Type: 0x%02X (%s)\n", symbol_entries[i].Type, ""); //map(SECTION_SYMBOL_TYPE, symbol_entries[i].Type));
 		}
 		
 		printf("  StorageClass: %s\n", map(SECTION_STORAGE_CLASS, symbol_entries[i].StorageClass));
@@ -597,9 +622,13 @@ int read_archive() {
 	if (g_is_import_lib) {
 		if (g_is_microsoft_style) {
 			printf("This is a Microsoft style import library.\n");
+			if (g_is_masm32_lib) {
+			printf("This is a MASM32 style import library.\n");
+			}
 		} else {
 			printf("This is a GNU style import library.\n");
-		}
+		} 
+		
 	} else {
 		printf("This is a static library.\n");
 	}
