@@ -53,6 +53,8 @@
 		goto cleanup; \
 	} 
 	
+#define MIN(a, b) (a < b) ? a : b
+	
 #define STARTS_WITH(s1, s2) (strncmp(s1, s2, strlen(s2)) == 0)
 	
 char g_buffer[BUFFER_SIZE];
@@ -395,7 +397,7 @@ int ar_parse_coff_section_header(int i) {
 			list_flags(g_buffer, BUFFER_SIZE, SECTION_SECTION_CHARACTERISTICS, section_header.Characteristics));
 	
 	memset(g_buffer, 0, BUFFER_SIZE);
-	read_offset(g_buffer, section_header.SizeOfRawData, g_coff.offset + section_header.PointerToRawData);
+	read_offset(g_buffer, MIN(BUFFER_SIZE, section_header.SizeOfRawData), g_coff.offset + section_header.PointerToRawData);
 	
 	// Print the content of the section if the section starts with .idata$...
 	if (STARTS_WITH(name, ".idata")) {
