@@ -10,3 +10,5 @@ char* list_flags(char *buffer, size_t size, int section, int flags);
 
 int has_flags(int flag, int flags);
 
+int has_value(int section, int code);
+

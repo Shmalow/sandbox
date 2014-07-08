@@ -48,6 +48,15 @@ char* map(int section, int code) {
 	return s_buffer;
 }
 
+int has_value(int section, int code) {
+	for (int i = 0; i < map_counter; i++) {
+		if (hashmap[i].section == section && hashmap[i].code == code) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
 char* get_flags(char *buffer, size_t size, int section, int flags) {
 	strncpy(buffer, "", size);
 	for (int i = 0; i < map_counter; i++) {

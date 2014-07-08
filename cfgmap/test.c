@@ -10,6 +10,7 @@
 #define SECTION_C 2
 #define CODE_C1 132
 #define CODE_C2 133
+#define CODE_C3 134
 
 extern int map_counter;
 
@@ -31,6 +32,8 @@ int main() {
 	printf("%s\n", map(SECTION_A, CODE_A1));
 	printf("%s\n", map(SECTION_A, CODE_A2));
 	printf("%s\n", map(SECTION_B, CODE_B1));
+	char *answer = has_value(SECTION_C, CODE_C2) ? "Yes" : "No";
+	printf("Does the SECTION_C has the string Yannis? %s\n", answer);
 
 	return 0;
 }
