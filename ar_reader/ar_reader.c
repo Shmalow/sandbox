@@ -445,7 +445,7 @@ int ar_parse_coff_section_header(int i) {
 		
 	}
 	printf("%s content=\n", name);
-	print_hexa(g_buffer, section_header.SizeOfRawData);
+	print_hexa(g_buffer, MIN(BUFFER_SIZE, section_header.SizeOfRawData));
 	
 cleanup:
 	return result;
