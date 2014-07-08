@@ -32,6 +32,19 @@
 		goto cleanup; \
 	}
 	
+#define READ_ABSOLUTELY(buffer, size) \
+	g_s = read(g_fd, buffer, size); \
+	if (errno) { \
+		fprintf(stderr, "There is an error. errno=%d (%s)\n", errno, strerror(errno)); \
+		result = 1; \
+		goto cleanup; \
+	} \
+	if (g_s < size) { \
+		printf("End of file reached unexpectedly.\n"); \
+		result = 1; \
+		goto cleanup; \
+	}
+	
 #define LSEEK(offset, mode) \
 	lseek(g_fd, offset, mode); \
 	if (errno) { \
@@ -50,6 +63,7 @@ int g_is_microsoft_style = 0;
 int g_is_import_lib = 0;
 int g_is_masm32_lib = 0;
 int g_is_masm32_lib_first_time = 1;
+ssize_t g_s = 0;
 
 IMAGE_FILE_HEADER g_header; // coff header
 
@@ -63,7 +77,7 @@ int read_offset(char *buf, size_t size, int offset) {
 	int result = 0;
 	off_t current_offset = LSEEK(0, SEEK_CUR);
 	LSEEK(offset, SEEK_SET);
-	READ(buf, size);
+	READ_ABSOLUTELY(buf, size);
 	LSEEK(current_offset, SEEK_SET);
 	
 cleanup:
@@ -135,7 +149,7 @@ char *get_archive_name(int offset) {
 	off_t current_offset = LSEEK(0, SEEK_CUR);
 	LSEEK(offset, SEEK_SET);
 	char name[16];
-	READ(name, 16);
+	READ_ABSOLUTELY(name, 16);
 	
 	archive_name = PARSE_FIELD(name);
 	
@@ -199,13 +213,13 @@ int ar_parse_first_linker_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	
 	printf("----First Linker Member\n");
 	unsigned int nbr_be;
-	READ(&nbr_be, 4);
+	READ_ABSOLUTELY(&nbr_be, 4);
 	
 	unsigned int nbr = inverse_endian(nbr_be);
 	printf("Symbol Nbr: %u\n", nbr);
 	
 	offset = (unsigned int *) malloc(sizeof(unsigned int) * nbr);
-	READ(offset, nbr * 4);
+	READ_ABSOLUTELY(offset, nbr * 4);
 	
 	for (int i = 0; i < nbr; i++) {
 		offset[i] = inverse_endian(offset[i]);
@@ -215,7 +229,7 @@ int ar_parse_first_linker_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	int size = atoi(PARSE_FIELD(pmember_header->Size));
 	size_t symbol_size = sizeof(char) * (size - 4 - (nbr * 4));
 	symbol_name = (char *) malloc(symbol_size);
-	READ(symbol_name, symbol_size);
+	READ_ABSOLUTELY(symbol_name, symbol_size);
 	
 	char *cursor = symbol_name;
 	int i = 0;
@@ -242,23 +256,23 @@ int ar_parse_second_linker_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	
 	printf("----Second Linker Member\n");
 	unsigned int member_nbr;
-	READ(&member_nbr, 4);
+	READ_ABSOLUTELY(&member_nbr, 4);
 	printf("Member Nbr:%d\n", member_nbr);
 
 	size_t size = sizeof(unsigned int) * member_nbr;
 	offset = (unsigned int *) malloc(size);
-	READ(offset, size);
+	READ_ABSOLUTELY(offset, size);
 	for (int i = 0; i < member_nbr; i++) {
 		printf("offset[%d]=0x%08X\n", i, offset[i]);
 	}
 	
 	unsigned int symbol_nbr;
-	READ(&symbol_nbr, 4);
+	READ_ABSOLUTELY(&symbol_nbr, 4);
 	printf("Symbol Nbr:%d\n", symbol_nbr);
 	
 	size = sizeof(unsigned short int) * symbol_nbr;
 	indice = (unsigned short int *) malloc(size);
-	READ(indice, size);
+	READ_ABSOLUTELY(indice, size);
 	for (int i = 0; i < symbol_nbr; i++) {
 		printf("indice[%d]=%d\n", i, indice[i]);
 	}
@@ -266,7 +280,7 @@ int ar_parse_second_linker_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	int total_size = atoi(PARSE_FIELD(pmember_header->Size));
 	size = total_size - (4 + 4 * member_nbr + 4 + 2 * symbol_nbr);
 	string = (char *) malloc(size);
-	READ(string, size);
+	READ_ABSOLUTELY(string, size);
 	char *cursor = string;
 	int i = 0;
 	while (cursor < string + size) {
@@ -288,7 +302,7 @@ int ar_parse_longnames_member(PIMAGE_ARCHIVE_MEMBER_HEADER pmember_header) {
 	printf("----Longnames Member\n");
 	int size = atoi(PARSE_FIELD(pmember_header->Size));
 	g_longnames_member_buffer = (char *) malloc(size);
-	READ(g_longnames_member_buffer, size);
+	READ_ABSOLUTELY(g_longnames_member_buffer, size);
 	char *cursor = g_longnames_member_buffer;
 	int i = 0;
 	while (cursor < g_longnames_member_buffer + size) {
@@ -304,7 +318,16 @@ cleanup:
 int ar_parse_coff_header() {
 	int result = 0;
 	
-	READ(&g_header, sizeof(IMAGE_FILE_HEADER));
+	ssize_t size = READ(&g_header, sizeof(IMAGE_FILE_HEADER));
+	if (size < sizeof(IMAGE_FILE_HEADER)) {
+		result = 1;
+		goto cleanup;
+	}
+	
+	if (!has_value(SECTION_MACHINE, g_header.Machine)) {
+		result = 1;
+		goto cleanup;
+	}
 	
 	if (g_header.Machine == IMAGE_FILE_MACHINE_UNKNOWN && g_header.NumberOfSections == 0xFFFF) {
 		// Import header
@@ -330,16 +353,6 @@ int ar_parse_coff_header() {
 	} else {
 		// Normal coff header
 		printf("---COFF Header\n");
-		switch (g_header.Machine) {
-			case 0x0:
-				snprintf(g_buffer, BUFFER_SIZE, "%s", "Unknown machine");
-				break;
-			case 0x14c:
-				snprintf(g_buffer, BUFFER_SIZE, "%s", "i386");
-				break;
-			default:
-				snprintf(g_buffer, BUFFER_SIZE, "%04X", g_header.Machine);
-		}
 		printf("Machine type: %s\n", map(SECTION_MACHINE, g_header.Machine));
 		printf("Number of sections: %d\n", g_header.NumberOfSections);
 		
@@ -395,7 +408,7 @@ int ar_parse_coff_section_header(int i) {
 			unsigned int content;
 			off_t current_offset = LSEEK(0, SEEK_CUR);
 			LSEEK(g_coff.offset + section_header.PointerToRawData, SEEK_SET);
-			READ(&content, section_header.SizeOfRawData);
+			READ_ABSOLUTELY(&content, section_header.SizeOfRawData);
 			LSEEK(current_offset, SEEK_SET);
 			printf("Content as int: 0x%08X.\n", content);
 		} else if (section_header.SizeOfRawData != 4) {
@@ -443,7 +456,8 @@ int ar_parse_coff_section_table() {
 	int size = g_header.NumberOfSections * sizeof(IMAGE_SECTION_HEADER);
 	g_coff.section_table = (PIMAGE_SECTION_HEADER) malloc(size);
 	LSEEK(g_header.SizeOfOptionalHeader, SEEK_CUR);
-	READ(g_coff.section_table, size);
+	READ_ABSOLUTELY(g_coff.section_table, size);
+
 	for (int i = 0; i < g_header.NumberOfSections; i++) {
 		TRY(ar_parse_coff_section_header(i));
 	}
@@ -463,7 +477,8 @@ int ar_parse_coff_symbol_table() {
 	
 	int size = g_header.NumberOfSymbols * sizeof(IMAGE_SYMBOL);
 	PIMAGE_SYMBOL symbol_entries = (PIMAGE_SYMBOL) malloc(size);
-	READ(symbol_entries, size);
+	READ_ABSOLUTELY(symbol_entries, size);
+	
 
 	int string_table_offset = g_coff.offset + g_header.PointerToSymbolTable + size;
 
@@ -539,7 +554,7 @@ int ar_parse_object_import_name_str() {
 	int size = sizeof(char) * headerp->Size;
 	printf("size=%d\n", size);
 	string = (char *) malloc(size);
-	READ(string, size);
+	READ_ABSOLUTELY(string, size);
 	char *cursor = string;
 	int i = 0;
 	while (cursor < string + size) {
@@ -614,9 +629,15 @@ int read_archive() {
 		} else if (strcmp(name, "//") == 0) {
 			TRY(ar_parse_longnames_member(&member_header));
 		} else if ((name[0] == '/') && (atoi(name + 1) != 0)) { // Name is /n
-			TRY(ar_parse_object_member(&member_header));
+			int res = ar_parse_object_member(&member_header);
+			if (res != 0) {
+				printf("This member is not a COFF file.\n");
+			}
 		} else if (name[0] != '/') { // Case of name/
-			TRY(ar_parse_object_member(&member_header));
+			int res = ar_parse_object_member(&member_header);
+			if (res != 0) {
+				printf("This member is not a COFF file.\n");
+			}
 		}
 	}
 	if (g_is_import_lib) {
