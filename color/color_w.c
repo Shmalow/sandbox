@@ -9,7 +9,7 @@ int main () {
 	WORD saved_attributes;
 	
 	GetConsoleScreenBufferInfo(hConsole, &consoleInfo);
-    saved_attributes = consoleInfo.wAttributes;
+	saved_attributes = consoleInfo.wAttributes;
 
 	SetConsoleTextAttribute(hConsole, FOREGROUND_BLUE);
 	printf("Hell");
@@ -24,8 +24,8 @@ int main () {
 	fflush(stdout);
 	
 	// Restore original attributes 
-    SetConsoleTextAttribute(hConsole, saved_attributes);
-    printf("Back to normal");
+	SetConsoleTextAttribute(hConsole, saved_attributes);
+	printf("Back to normal");
 
 	return result;
 }
