@@ -5,4 +5,4 @@ all:
 	gcc -Wall -Werror -o seh.exe seh_test.o -lseh 
 	
 clean:
-	rm -f *.exe *.o
+	rm -f *.exe *.o *.i *.s
