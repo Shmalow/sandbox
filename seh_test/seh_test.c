@@ -13,6 +13,7 @@ int ExceptionFilter(unsigned int code, unsigned int excToFilter) {
 int main() {
 	int x = 0;
 	int y = 4;
+	//printf("size of: %d\n", sizeof(__libseh_buf));
 	__seh_try {  /* __try becomes __seh_try */
 		y /= x;
 	}
