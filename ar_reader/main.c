@@ -1,11 +1,12 @@
 #include <stdio.h>
+#include <string.h>
 #include <math.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <stdarg.h>
 #include <sys/stat.h>
-#include <libgen.h>
+
 #include <getopt.h>
 #include <ctype.h>
 
@@ -22,6 +23,25 @@ typedef struct {
 
 char *progname = NULL;
 char *filename = NULL;
+
+const char *basename(const char *path) {
+	printf("path=%s\n", path);
+	if (path == NULL) {
+		return NULL;
+	}
+	char *p = strchr(path, '\\');
+	if (p == NULL) {
+		p = strchr(path, '/');
+	}
+	if (p == NULL) {
+		return path;
+	}
+	if (p[1] == '\0') {
+		return path;
+	}
+	printf("p+1=%s\n", p + 1);
+	return basename(p + 1);
+}
 
 void version() {
 	fprintf(stderr, "Version: %s\n", VERSION);
@@ -69,6 +89,8 @@ void manage_options(int argc, char *argv[]) {
 
 int main(int argc, char** argv) {
 	int result = 0;
+	progname = argv[0];
+	printf("progname=%s\n", progname);
 	manage_options(argc, argv);
 	result = read_archive();
 	

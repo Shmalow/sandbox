@@ -33,6 +33,7 @@
 	}
 	
 #define READ_ABSOLUTELY(buffer, size) \
+	memset(buffer, 0, size); \
 	g_s = read(g_fd, buffer, size); \
 	if (errno) { \
 		fprintf(stderr, "There is an error. errno=%d (%s)\n", errno, strerror(errno)); \
@@ -77,6 +78,7 @@ char *g_longnames_member_buffer = NULL;
 
 int read_offset(char *buf, size_t size, int offset) {
 	int result = 0;
+	
 	off_t current_offset = LSEEK(0, SEEK_CUR);
 	LSEEK(offset, SEEK_SET);
 	READ_ABSOLUTELY(buf, size);
@@ -520,17 +522,23 @@ int ar_parse_coff_symbol_table() {
 			}
 		}
 
+		if (symbol_entries[i].SectionNumber > g_header.NumberOfSections) {
+			printf("Error: The section ID (%d) is too big (> %d)\n", symbol_entries[i].SectionNumber,  g_header.NumberOfSections);
+			result = 1;
+			goto cleanup;
+		}
 		if (symbol_entries[i].SectionNumber <= 0) {
 			printf("  SectionNumber: %d (%s)\n",
 				symbol_entries[i].SectionNumber, map(SECTION_SECTION_NUMBER_VALUE, symbol_entries[i].SectionNumber));
 		} else {
+			printf("  SectionNumber: %d\n", symbol_entries[i].SectionNumber);
 			printf("  SectionNumber: %d (%s)\n",
 				symbol_entries[i].SectionNumber, g_coff.section_table[symbol_entries[i].SectionNumber - 1].Name);
 		}
 		if (symbol_entries[i].Type != 0) {
 			printf("  Type: 0x%02X (%s)\n", symbol_entries[i].Type, ""); //map(SECTION_SYMBOL_TYPE, symbol_entries[i].Type));
 		}
-		
+
 		printf("  StorageClass: %s\n", map(SECTION_STORAGE_CLASS, symbol_entries[i].StorageClass));
 		if (symbol_entries[i].NumberOfAuxSymbols != 0) {
 			printf("  NumberOfAuxSymbols: %d\n", symbol_entries[i].NumberOfAuxSymbols);
@@ -633,12 +641,12 @@ int read_archive() {
 		} else if ((name[0] == '/') && (atoi(name + 1) != 0)) { // Name is /n
 			int res = ar_parse_object_member(&member_header);
 			if (res != 0) {
-				printf("This member is not a COFF file.\n");
+				printf("This member is not a valid COFF file.\n");
 			}
 		} else if (name[0] != '/') { // Case of name/
 			int res = ar_parse_object_member(&member_header);
 			if (res != 0) {
-				printf("This member is not a COFF file.\n");
+				printf("This member is not a valid COFF file.\n");
 			}
 		}
 	}

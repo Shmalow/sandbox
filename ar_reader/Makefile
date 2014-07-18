@@ -13,4 +13,6 @@ clean:
 install: all
 	mkdir -p /usr/local/bin
 	cp -f ar_reader.exe /usr/local/bin
+	mkdir -p /usr/local/share/man/man1
+	cp -f ./doc/ar_reader.1 /usr/local/share/man/man1
 	
